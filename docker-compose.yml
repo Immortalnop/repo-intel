@@ -1,0 +1,31 @@
+services:
+  repo-intel:
+    build: .
+    ports:
+      - "8000:8000"
+    volumes:
+      # mount the repository you want analyzed (read-only)
+      - ${REPO_PATH:-.}:/repo:ro
+    environment:
+      # --- optional hardening (see repo_intel/api/security.py) ---
+      # REPO_INTEL_API_TOKEN: "change-me"
+      # REPO_INTEL_CORS_ORIGINS: "https://your.dashboard"
+      REPO_INTEL_RATE_LIMIT: "120"
+      REPO_INTEL_LOG: "INFO"
+      # --- optional local LLM (uncomment the ollama service below) ---
+      # REPO_INTEL_LLM_BACKEND: "ollama"
+      # REPO_INTEL_LLM_URL: "http://ollama:11434"
+      # REPO_INTEL_LLM_MODEL: "qwen2.5:3b-instruct"
+    # depends_on: [ollama]   # enable with the ollama profile
+
+  # Optional local Qwen via Ollama. Start with:  docker compose --profile llm up
+  ollama:
+    image: ollama/ollama:latest
+    profiles: ["llm"]
+    ports:
+      - "11434:11434"
+    volumes:
+      - ollama:/root/.ollama
+
+volumes:
+  ollama:

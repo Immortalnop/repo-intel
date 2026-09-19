@@ -1,0 +1,328 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="dark">
+<head>
+<meta charset="utf-8"/>
+<meta name="viewport" content="width=device-width, initial-scale=1"/>
+<title>Git Repository Intelligence</title>
+<script src="/plotly.min.js" charset="utf-8"></script>
+<script>
+  if(!window.Plotly){
+    var s=document.createElement('script');
+    s.src="https://cdn.plot.ly/plotly-2.35.2.min.js";document.head.appendChild(s);
+  }
+</script>
+<style>
+  :root{
+    --bg:#0f1420; --panel:#171d2b; --line:#273246; --text:#e8edf5;
+    --muted:#9aa7bd; --accent:#4f8cff; --hi:#ff5d5d; --med:#ffb454; --ok:#39d98a;
+    --grid:#273246; --overlay:rgba(15,20,32,.7);
+  }
+  [data-theme="light"]{
+    --bg:#f6f8fc; --panel:#ffffff; --line:#e3e8f0; --text:#1a2233;
+    --muted:#5b6a82; --accent:#2f6bd8; --hi:#e23b3b; --med:#d98a1a; --ok:#1f9d63;
+    --grid:#e3e8f0; --overlay:rgba(246,248,252,.7);
+  }
+  *{box-sizing:border-box}
+  body{margin:0;background:var(--bg);color:var(--text);
+    font:14px/1.5 -apple-system,Segoe UI,Roboto,Helvetica,Arial,sans-serif}
+  header{padding:16px 24px;border-bottom:1px solid var(--line);
+    display:flex;align-items:center;gap:12px;flex-wrap:wrap;position:sticky;top:0;
+    background:var(--bg);z-index:5}
+  header h1{font-size:18px;margin:0;font-weight:650}
+  header .repo{color:var(--muted);font-size:13px}
+  button{background:var(--accent);color:#fff;border:0;border-radius:7px;
+    padding:8px 12px;font-size:13px;cursor:pointer}
+  button.ghost{background:transparent;border:1px solid var(--line);color:var(--text)}
+  button:hover{filter:brightness(1.08)}
+  .wrap{padding:20px 24px;max-width:1280px;margin:0 auto}
+  .kpis{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:14px}
+  .kpi{background:var(--panel);border:1px solid var(--line);border-radius:12px;padding:16px}
+  .kpi .v{font-size:26px;font-weight:700}
+  .kpi .l{color:var(--muted);font-size:12px;text-transform:uppercase;letter-spacing:.5px}
+  .grid{display:grid;grid-template-columns:1fr 1fr;gap:16px;margin-top:16px}
+  @media(max-width:900px){.grid{grid-template-columns:1fr}}
+  .card{background:var(--panel);border:1px solid var(--line);border-radius:12px;padding:16px}
+  .card h2{font-size:14px;margin:0 0 10px;font-weight:600}
+  .full{grid-column:1/-1}
+  table{width:100%;border-collapse:collapse;font-size:13px}
+  th,td{text-align:left;padding:7px 8px;border-bottom:1px solid var(--line)}
+  th{color:var(--muted);font-weight:600;font-size:12px}
+  td.mono,.mono{font-family:ui-monospace,Menlo,monospace;font-size:12px}
+  tr.click{cursor:pointer}
+  tr.click:hover td{background:color-mix(in srgb,var(--accent) 10%,transparent)}
+  .pill{padding:2px 8px;border-radius:20px;font-size:11px;font-weight:600}
+  .high{background:rgba(255,93,93,.15);color:var(--hi)}
+  .medium{background:rgba(255,180,84,.15);color:var(--med)}
+  .info,.low{background:rgba(57,217,138,.15);color:var(--ok)}
+  .narr{color:var(--text);line-height:1.6}
+  .muted{color:var(--muted)}
+  select{background:var(--panel);color:var(--text);border:1px solid var(--line);
+    border-radius:6px;padding:6px}
+  /* loading overlay */
+  #loading{position:fixed;inset:0;background:var(--overlay);display:none;
+    align-items:center;justify-content:center;z-index:20}
+  #loading.on{display:flex}
+  .spin{width:38px;height:38px;border:4px solid var(--line);border-top-color:var(--accent);
+    border-radius:50%;animation:sp 0.8s linear infinite}
+  @keyframes sp{to{transform:rotate(360deg)}}
+  /* error banner */
+  #error{display:none;margin:16px 24px 0;padding:12px 16px;border-radius:10px;
+    background:rgba(255,93,93,.12);border:1px solid var(--hi);color:var(--hi)}
+  #error.on{display:block}
+  /* modal */
+  #modal{position:fixed;inset:0;background:var(--overlay);display:none;
+    align-items:center;justify-content:center;z-index:30}
+  #modal.on{display:flex}
+  .modal-card{background:var(--panel);border:1px solid var(--line);border-radius:14px;
+    padding:22px;max-width:520px;width:92%;box-shadow:0 20px 60px rgba(0,0,0,.35)}
+  .modal-card h3{margin:0 0 4px;font-size:16px}
+  .sig{margin:10px 0}
+  .sig .bar{height:8px;border-radius:5px;background:var(--line);overflow:hidden}
+  .sig .bar>span{display:block;height:100%;background:var(--accent)}
+  .row{display:flex;justify-content:space-between;font-size:12px;color:var(--muted);margin-bottom:3px}
+</style>
+</head>
+<body>
+<div id="loading"><div class="spin"></div></div>
+
+<header>
+  <h1>Git Repository Intelligence</h1>
+  <span class="repo" id="repo">…</span>
+  <span style="flex:1"></span>
+  <label class="muted" style="font-size:12px">Window:
+    <select id="sinceSel" onchange="refresh()">
+      <option value="">all history</option>
+      <option value="30">30 days</option>
+      <option value="90">90 days</option>
+      <option value="180">180 days</option>
+      <option value="365">1 year</option>
+    </select>
+  </label>
+  <label class="muted" style="font-size:12px">Narrative:
+    <select id="llmSel"><option value="0">rule-based</option><option value="1">local LLM</option></select>
+  </label>
+  <button class="ghost" onclick="loadSummary()">Briefing</button>
+  <button class="ghost" onclick="exportJson()">Export</button>
+  <button class="ghost" onclick="clearData()" title="Clear stored data for this repo">Clear</button>
+  <button class="ghost" onclick="toggleTheme()" id="themeBtn" title="Toggle theme">☾</button>
+  <button onclick="refresh()">Re-mine</button>
+</header>
+
+<div id="error"></div>
+
+<div class="wrap">
+  <div class="kpis" id="kpis"></div>
+
+  <div class="card full" id="narrCard" style="margin-top:16px;display:none">
+    <h2>AI / analytics briefing <span class="muted" id="narrSrc"></span></h2>
+    <div class="narr" id="narr"></div>
+  </div>
+
+  <div class="grid">
+    <div class="card"><h2>Commit activity (per month)</h2><div id="activity" style="height:300px"></div></div>
+    <div class="card"><h2>Top bug-prone modules (risk)</h2><div id="riskChart" style="height:300px"></div></div>
+    <div class="card"><h2>Author contribution</h2><div id="authChart" style="height:300px"></div></div>
+    <div class="card"><h2>Churn vs bug-fixes</h2><div id="scatter" style="height:300px"></div></div>
+    <div class="card full" id="cxCard" style="display:none"><h2>Complexity over history (avg cyclomatic)</h2><div id="cxTrend" style="height:280px"></div></div>
+
+    <div class="card full"><h2>Flags</h2><div id="flags"></div></div>
+    <div class="card"><h2>Bug-prone modules <span class="muted" style="font-weight:400">(click a row)</span></h2><div id="hotspots"></div></div>
+    <div class="card"><h2>Author departure risk</h2><div id="departure"></div></div>
+    <div class="card"><h2>Knowledge silos (bus factor)</h2><div id="silos"></div></div>
+    <div class="card full"><h2>Architectural drift (temporal coupling)</h2><div id="drift"></div></div>
+  </div>
+</div>
+
+<div id="modal" onclick="if(event.target.id==='modal')closeModal()">
+  <div class="modal-card" id="modalBody"></div>
+</div>
+
+<script>
+const CFG={displayModeBar:false,responsive:true};
+const RISK=v=>v>=60?'#ff5d5d':v>=40?'#ffb454':'#4f8cff';
+function css(v){return getComputedStyle(document.documentElement).getPropertyValue(v).trim();}
+function chartTheme(extra){
+  const grid=css('--grid'), muted=css('--muted');
+  return Object.assign({paper_bgcolor:'rgba(0,0,0,0)',plot_bgcolor:'rgba(0,0,0,0)',
+    font:{color:muted,size:11},margin:{t:10,r:12,b:36,l:44},
+    xaxis:{gridcolor:grid},yaxis:{gridcolor:grid}}, extra||{});
+}
+async function j(u,o){const r=await fetch(u,o); if(!r.ok) throw new Error(u+' -> '+r.status); return r.json();}
+function showLoading(on){document.getElementById('loading').classList.toggle('on',on);}
+function showError(msg){const e=document.getElementById('error');
+  if(msg){e.textContent='Error: '+msg;e.classList.add('on');}else{e.classList.remove('on');}}
+function kpi(l,v,color){return `<div class="kpi"><div class="v" ${color?`style="color:${color}"`:''}>${v}</div><div class="l">${l}</div></div>`;}
+
+let REP=null;
+
+async function load(){
+  showLoading(true); showError('');
+  try{
+    const rep=await j('/api/report'); REP=rep;
+    document.getElementById('repo').textContent=rep.repo;
+    const s=rep.summary, rr=rep.release_readiness;
+    const hc=s.health_score>=70?'#39d98a':s.health_score>=45?'#ffb454':'#ff5d5d';
+    const vc={'READY':'#39d98a','CAUTION':'#ffb454','NOT READY':'#ff5d5d'}[rr.verdict]||css('--text');
+    let k=kpi('Health score',s.health_score+'/100',hc)+
+      kpi('Release',rr.verdict+' ('+rr.score+')',vc)+
+      kpi('Commits',s.commits)+kpi('Files',s.files)+
+      kpi('Authors',s.authors)+kpi('Bug-fix commits',s.bugfix_commits)+
+      kpi('Total churn',s.total_churn)+
+      kpi('Trend',(rep.prediction&&rep.prediction.trend)||'n/a',
+          {DETERIORATING:'#ff5d5d',IMPROVING:'#39d98a',STABLE:'#ffb454'}[rep.prediction&&rep.prediction.trend]);
+    if(s.tracked_bugfixes!==undefined)
+      k+=kpi('Tracked bug-fixes',s.tracked_bugfixes+' ('+Math.round((s.issue_linked_ratio||0)*100)+'% linked)');
+    document.getElementById('kpis').innerHTML=k;
+    renderTables(rep);
+    renderCharts(rep);
+  }catch(e){ showError(e.message); }
+  finally{ showLoading(false); }
+}
+
+function renderCharts(rep){
+  if(!window.Plotly){return setTimeout(()=>renderCharts(rep),300);}
+  const act=rep.commit_activity;
+  Plotly.newPlot('activity',[
+    {x:act.map(a=>a.month),y:act.map(a=>a.commits),type:'scatter',mode:'lines+markers',name:'commits',line:{color:'#4f8cff'}},
+    {x:act.map(a=>a.month),y:act.map(a=>a.bugfixes),type:'scatter',mode:'lines+markers',name:'bug-fixes',line:{color:'#ff5d5d'}}
+  ],chartTheme({legend:{orientation:'h',y:1.15}}),CFG);
+
+  const h=rep.hotspots.slice(0,12).reverse();
+  Plotly.newPlot('riskChart',[{type:'bar',orientation:'h',x:h.map(d=>d.risk_score),
+    y:h.map(d=>d.path.split('/').pop()),marker:{color:h.map(d=>RISK(d.risk_score))},
+    text:h.map(d=>d.risk_score),textposition:'auto'}],
+    chartTheme({margin:{t:10,r:12,b:36,l:120},xaxis:{type:'linear',range:[0,100],gridcolor:css('--grid')},
+      yaxis:{type:'category',automargin:true,gridcolor:css('--grid')}}),CFG);
+
+  const a=rep.authors.slice(0,8);
+  Plotly.newPlot('authChart',[{type:'pie',hole:.55,labels:a.map(x=>x.author),values:a.map(x=>x.commits),
+    textinfo:'label+percent',marker:{colors:['#4f8cff','#39d98a','#ffb454','#ff5d5d','#a78bfa','#22d3ee','#f472b6','#94a3b8']}}],
+    chartTheme({showlegend:false}),CFG);
+
+  const f=rep.all_files;
+  Plotly.newPlot('scatter',[{x:f.map(d=>d.churn),y:f.map(d=>d.bugfixes),mode:'markers',type:'scatter',text:f.map(d=>d.path),
+    marker:{size:f.map(d=>6+d.risk_score/6),color:f.map(d=>d.risk_score),
+      colorscale:[[0,'#4f8cff'],[0.5,'#ffb454'],[1,'#ff5d5d']],showscale:false,opacity:.8}}],
+    chartTheme({xaxis:{title:'churn',gridcolor:css('--grid')},yaxis:{title:'bug-fixes',gridcolor:css('--grid')}}),CFG);
+
+  const ct=rep.complexity_trend||[];
+  const card=document.getElementById('cxCard');
+  if(ct.length>=2){
+    card.style.display='';
+    Plotly.newPlot('cxTrend',[{x:ct.map(p=>p.date.slice(0,10)),y:ct.map(p=>p.avg_complexity),
+      type:'scatter',mode:'lines+markers',line:{color:'#a78bfa'},name:'avg complexity'},
+      {x:ct.map(p=>p.date.slice(0,10)),y:ct.map(p=>p.files),type:'bar',opacity:.25,yaxis:'y2',
+       marker:{color:'#4f8cff'},name:'files sampled'}],
+      chartTheme({legend:{orientation:'h',y:1.15},yaxis:{title:'avg cyclomatic',gridcolor:css('--grid')},
+        yaxis2:{overlaying:'y',side:'right',showgrid:false,title:'files'}}),CFG);
+  } else { card.style.display='none'; }
+}
+
+function renderTables(rep){
+  document.getElementById('flags').innerHTML=rep.flags.map(x=>
+    `<div style="padding:6px 0"><span class="pill ${x.level}">${x.level.toUpperCase()}</span>
+     <b style="margin:0 8px">${x.code}</b><span class="muted">${x.message}</span></div>`).join('');
+
+  const hasCx=rep.summary.complexity_available;
+  const hcols=['File','Risk','Churn','Fixes','Bus'].concat(hasCx?['Cx']:[]);
+  const hbody=rep.hotspots.slice(0,12).map((d,i)=>({cells:[
+    `<span class="mono">${d.path}</span>`,
+    `<span style="color:${RISK(d.risk_score)}">${d.risk_score}</span>`,
+    d.churn,d.bugfixes,d.bus_factor].concat(hasCx?[d.complexity??'—']:[]), idx:i}));
+  document.getElementById('hotspots').innerHTML=clickTbl(hcols,hbody,'openHotspot');
+
+  document.getElementById('departure').innerHTML=(rep.departure_risk&&rep.departure_risk.length)?tbl(
+    ['Author','Owns','Codebase'],
+    rep.departure_risk.slice(0,10).map(d=>[d.author,d.owned_files,Math.round(d.codebase_share*100)+'%']))
+    :'<div class="muted">No single-author silos.</div>';
+
+  document.getElementById('silos').innerHTML=rep.knowledge_silos.length?tbl(
+    ['File','Owner','Share','Bus'],
+    rep.knowledge_silos.slice(0,12).map(d=>[`<span class="mono">${d.path}</span>`,d.top_author,
+      Math.round(d.top_author_share*100)+'%',d.bus_factor]))
+    :'<div class="muted">No single-owner files.</div>';
+
+  document.getElementById('drift').innerHTML=rep.coupling.length?tbl(
+    ['File A','File B','Co-changes','Confidence','Cross-module'],
+    rep.coupling.slice(0,15).map(d=>[`<span class="mono">${d.file_a}</span>`,`<span class="mono">${d.file_b}</span>`,
+      d.shared_changes,Math.round(d.confidence*100)+'%',d.cross_module?'<span class="pill high">YES</span>':'-']))
+    :'<div class="muted">No significant coupling.</div>';
+}
+
+function tbl(cols,rows){
+  return '<table><thead><tr>'+cols.map(c=>`<th>${c}</th>`).join('')+'</tr></thead><tbody>'+
+    rows.map(r=>'<tr>'+r.map(c=>`<td>${c}</td>`).join('')+'</tr>').join('')+'</tbody></table>';
+}
+function clickTbl(cols,rows,handler){
+  return '<table><thead><tr>'+cols.map(c=>`<th>${c}</th>`).join('')+'</tr></thead><tbody>'+
+    rows.map(r=>`<tr class="click" onclick="${handler}(${r.idx})">`+r.cells.map(c=>`<td>${c}</td>`).join('')+'</tr>').join('')+
+    '</tbody></table>';
+}
+
+function openHotspot(i){
+  const d=REP.hotspots[i]; if(!d) return;
+  const sig=d.signals||{};
+  const bars=Object.keys(sig).map(k=>`<div class="sig">
+    <div class="row"><span>${k}</span><span>${(sig[k]*100).toFixed(0)}%</span></div>
+    <div class="bar"><span style="width:${Math.min(sig[k]*100,100)}%"></span></div></div>`).join('');
+  const cx=d.complexity!=null?`<div class="row"><span>cyclomatic complexity (avg / max)</span><span>${d.complexity} / ${d.complexity_max}</span></div>`:'';
+  document.getElementById('modalBody').innerHTML=`
+    <h3 class="mono">${d.path}</h3>
+    <div class="muted" style="margin-bottom:12px">risk ${d.risk_score} · churn ${d.churn} · ${d.bugfixes} fixes ·
+      owner ${d.top_author} (${Math.round(d.top_author_share*100)}%) · bus factor ${d.bus_factor}</div>
+    <b style="font-size:13px">Risk signal breakdown</b>${bars}${cx}
+    <div style="text-align:right;margin-top:14px"><button class="ghost" onclick="closeModal()">Close</button></div>`;
+  document.getElementById('modal').classList.add('on');
+}
+function closeModal(){document.getElementById('modal').classList.remove('on');}
+
+async function loadSummary(){
+  const useLlm=document.getElementById('llmSel').value==='1';
+  document.getElementById('narrCard').style.display='block';
+  document.getElementById('narr').textContent='Generating…';
+  try{
+    const r=await j('/api/summary?llm='+(useLlm?'true':'false'));
+    document.getElementById('narr').textContent=r.text;
+    document.getElementById('narrSrc').textContent='· source: '+r.source+(r.model?` (${r.model})`:'')+(r.cached?' · cached':'');
+  }catch(e){ document.getElementById('narr').textContent='Failed: '+e.message; }
+}
+
+async function refresh(){
+  const days=document.getElementById('sinceSel').value;
+  showLoading(true); showError('');
+  try{ await j('/api/refresh'+(days?('?since_days='+days):''),{method:'POST'}); await load(); }
+  catch(e){ showError(e.message); showLoading(false); }
+}
+
+async function clearData(){
+  if(!confirm('Clear stored report + mining cache for this repo? It will be re-mined.')) return;
+  showLoading(true); showError('');
+  try{ await j('/api/clear',{method:'POST'}); await load(); }
+  catch(e){ showError(e.message); showLoading(false); }
+}
+
+function exportJson(){
+  if(!REP) return;
+  const blob=new Blob([JSON.stringify(REP,null,2)],{type:'application/json'});
+  const a=document.createElement('a');
+  a.href=URL.createObjectURL(blob);
+  a.download='repo-intel-report.json'; a.click(); URL.revokeObjectURL(a.href);
+}
+
+function toggleTheme(){
+  const el=document.documentElement;
+  const light=el.dataset.theme==='light';
+  el.dataset.theme=light?'dark':'light';
+  document.getElementById('themeBtn').textContent=light?'☾':'☀';
+  try{localStorage.setItem('ri-theme',el.dataset.theme);}catch(e){}
+  if(REP) renderCharts(REP);   // recolor charts for the new theme
+}
+(function initTheme(){
+  try{const t=localStorage.getItem('ri-theme'); if(t){document.documentElement.dataset.theme=t;
+    document.getElementById('themeBtn').textContent=t==='light'?'☀':'☾';}}catch(e){}
+})();
+
+load();
+</script>
+</body>
+</html>

@@ -1,0 +1,38 @@
+name: CI
+
+on:
+  push:
+    branches: [main, master]
+  pull_request:
+
+jobs:
+  quality:
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        python-version: ["3.9", "3.11", "3.12"]
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0          # PyDriller needs full history
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: ${{ matrix.python-version }}
+
+      - name: Install
+        run: |
+          python -m pip install --upgrade pip
+          pip install -e ".[dev]"
+
+      - name: Ruff (lint)
+        run: ruff check repo_intel tests
+
+      - name: Black (format check)
+        run: black --check repo_intel tests
+
+      - name: Mypy (types)
+        run: mypy repo_intel
+
+      - name: Pytest + coverage gate
+        run: pytest --cov=repo_intel --cov-report=term-missing --cov-fail-under=85

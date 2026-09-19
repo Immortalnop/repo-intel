@@ -1,0 +1,74 @@
+[build-system]
+requires = ["setuptools>=61"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "repo-intel"
+version = "1.0.0"
+description = "Git Repository Intelligence — software health analytics from Git history (LLM optional)"
+readme = "README.md"
+requires-python = ">=3.9"
+dependencies = [
+    "gitpython>=3.1",
+    "pydriller>=2.5",
+    "fastapi>=0.100",
+    "uvicorn[standard]>=0.23",
+    "plotly>=5.0",
+    "requests>=2.28",
+    "pydantic>=2.0",
+    "tomli>=2.0; python_version < '3.11'",
+]
+
+[project.optional-dependencies]
+cache = ["pandas>=1.5", "pyarrow>=10.0"]   # parquet export (sqlite always works)
+complexity = ["lizard>=1.17"]              # multi-language cyclomatic complexity
+test = ["pytest>=7.0", "pytest-cov>=4.0", "httpx>=0.24", "lizard>=1.17"]
+dev = ["ruff>=0.4", "black>=24.0", "mypy>=1.8", "pytest>=7.0",
+       "pytest-cov>=4.0", "httpx>=0.24", "types-requests", "lizard>=1.17"]
+
+[project.scripts]
+repo-intel = "repo_intel.cli.main:main"
+
+[tool.setuptools]
+packages = [
+    "repo_intel", "repo_intel.extract", "repo_intel.metrics",
+    "repo_intel.analysis", "repo_intel.llm", "repo_intel.report",
+    "repo_intel.cli", "repo_intel.api",
+]
+
+[tool.setuptools.package-data]
+"repo_intel" = ["py.typed"]
+"repo_intel.api" = ["static/*"]
+
+[tool.ruff]
+line-length = 100
+target-version = "py39"
+extend-exclude = ["repo_intel/api/static"]
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "UP", "B", "W"]
+ignore = ["E741"]  # ambiguous var names (l/a/b are fine in local math)
+
+[tool.black]
+line-length = 100
+extend-exclude = "repo_intel/api/static"
+
+[tool.mypy]
+python_version = "3.9"
+ignore_missing_imports = true
+warn_unused_ignores = true
+no_implicit_optional = true
+files = ["repo_intel"]
+
+[[tool.mypy.overrides]]
+module = "requests.*"
+ignore_missing_imports = true
+follow_untyped_imports = true
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+addopts = "-q"
+
+[tool.coverage.run]
+source = ["repo_intel"]
+omit = ["repo_intel/__main__.py", "repo_intel/api/server.py"]

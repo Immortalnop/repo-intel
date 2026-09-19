@@ -1,0 +1,14 @@
+# Pinned versions for reproducible Docker builds. Regenerate with pip freeze.
+gitpython==3.1.62
+pydriller==2.12
+fastapi==0.141.1
+uvicorn==0.46.0
+starlette==1.0.0
+plotly==7.1.0
+requests==2.33.1
+pydantic==2.13.3
+pydantic-core==2.46.3
+anyio==4.13.0
+click==8.3.3
+h11==0.16.0
+lizard==1.24.0
